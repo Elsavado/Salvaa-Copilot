@@ -40,7 +40,7 @@ const App: React.FC = () => {
 
   useEffect(() => {
     // Listen for navigation events from main process
-    const cleanup = window.electronAPI.onNavigate((route) => {
+    const cleanup = window.electronAPI.onNavigate((route: any) => {
       setCurrentView(route as 'main' | 'settings' | 'cv' | 'preflight');
     });
 
