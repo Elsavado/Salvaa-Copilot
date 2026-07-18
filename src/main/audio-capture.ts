@@ -49,7 +49,7 @@ export class AudioCaptureService {
           }
         },
         video: false
-      });
+      } as any);
 
       // Set up MediaRecorder for continuous capture
       this.mediaRecorder = new MediaRecorder(this.mediaStream, {
