@@ -1,0 +1,93 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Custom scrollbar styles */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #1f2937;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #4b5563;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #6b7280;
+}
+
+/* Animation for streaming text */
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+.streaming-cursor::after {
+  content: '|';
+  animation: blink 1s infinite;
+  color: #34d399;
+}
+
+/* Overlay specific styles */
+.overlay-drag {
+  -webkit-app-region: drag;
+}
+
+.overlay-no-drag {
+  -webkit-app-region: no-drag;
+}
+
+/* Click-through mode */
+.click-through {
+  pointer-events: none;
+}
+
+.click-through * {
+  pointer-events: auto;
+}
+
+/* Line clamp utility */
+.line-clamp-3 {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.line-clamp-4 {
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* Form elements */
+.form-checkbox {
+  @apply rounded border-gray-600 bg-gray-700 text-emerald-500 focus:ring-emerald-500;
+}
+
+.form-radio {
+  @apply border-gray-600 bg-gray-700 text-emerald-500 focus:ring-emerald-500;
+}
+
+/* Transitions */
+.transition-all {
+  transition-property: all;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  transition-duration: 150ms;
+}
+
+/* Focus styles */
+input:focus, select:focus, textarea:focus, button:focus {
+  @apply outline-none ring-2 ring-emerald-500 ring-opacity-50;
+}
+
+/* Disabled states */
+input:disabled, button:disabled {
+  @apply opacity-50 cursor-not-allowed;
+}
