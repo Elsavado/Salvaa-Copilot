@@ -48,7 +48,7 @@ export async function extractTextFromRegion(
     }
 
     const { data } = await worker.recognize(imageData, {
-      rectangle: region
+      rectangle: { left: region.x, top: region.y, width: region.width, height: region.height }
     });
     
     return data.text;
