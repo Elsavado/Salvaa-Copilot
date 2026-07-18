@@ -530,10 +530,10 @@ class SalvaaaCopilotApp {
 }
 
 // Application entry point
-const app = new SalvaaaCopilotApp();
+const salvaAppInstance = new SalvaaaCopilotApp();
 
 app.whenReady().then(() => {
-  app.start();
+  salvaAppInstance.start();
 });
 
 app.on('window-all-closed', () => {
