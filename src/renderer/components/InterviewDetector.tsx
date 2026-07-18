@@ -7,8 +7,11 @@ const InterviewDetector: React.FC = () => {
 
   useEffect(() => {
     // Listen for interview status changes from main process
-    const cleanupStart = window.electronAPI.onInterviewStarted(() => {
+    const cleanupStart = window.electronAPI.onInterviewStarted((event: any, status: any) => {
       setInterviewActive(true);
+      if (status && status.platform) {
+        setDetectedPlatform(status.platform);
+      }
     });
 
     const cleanupEnd = window.electronAPI.onInterviewEnded(() => {
@@ -17,15 +20,16 @@ const InterviewDetector: React.FC = () => {
     });
 
     // Check initial status
-    window.electronAPI.getInterviewStatus().then(status: any) => {
-      setInterviewActive(status.active);
+    window.electronAPI.getInterviewStatus().then((status: any) => {
+      if (status) {
+        setInterviewActive(status.active);
+      }
     });
 
     return () => {
       cleanupStart();
       cleanupEnd();
     };
-  }, []);
 
   const platforms = [
     { name: 'Zoom', icon: '🎥' },
