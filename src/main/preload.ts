@@ -48,7 +48,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     return () => ipcRenderer.removeListener('critical-error', callback);
   },
   onNavigate: (callback: (event: any, route: string) => void) => {
-    ipcRenderer.on('navigate', (_, route) => callback(route));
+    ipcRenderer.on('navigate', (_, route) => callback(_, route));
     return () => ipcRenderer.removeListener('navigate', callback);
   }
 });
