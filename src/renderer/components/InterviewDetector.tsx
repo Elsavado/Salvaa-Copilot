@@ -17,7 +17,7 @@ const InterviewDetector: React.FC = () => {
     });
 
     // Check initial status
-    window.electronAPI.getInterviewStatus().then(status => {
+    window.electronAPI.getInterviewStatus().then(status: any) => {
       setInterviewActive(status.active);
     });
 
