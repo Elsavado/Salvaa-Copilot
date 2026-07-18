@@ -56,7 +56,7 @@ export class STTPipeline {
       }
 
       // Start real-time transcription
-      this.transcriber = await this.client.realtime.transcribe({
+      this.transcriber = await this.client.realtime.transcriber({
         sampleRate: 16000,
         wordBoost: ['interview', 'technical', 'coding']
       });
