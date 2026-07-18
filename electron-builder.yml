@@ -1,0 +1,44 @@
+appId: com.salvaaa.copilot
+productName: Salvaaa Copilot
+directories:
+  output: release
+files:
+  - dist/**/*
+  - assets/**/*
+  - package.json
+
+mac:
+  category: public.app-category.productivity
+  target:
+    - dmg
+    - zip
+  hardenedRuntime: true
+  entitlements: build/entitlements.mac.plist
+  entitlementsInherit: build/entitlements.mac.plist
+  gatekeeperAssess: false
+
+win:
+  target:
+    - nsis
+    - portable
+  icon: assets/icon.ico
+
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  installerIcon: assets/icon.ico
+  uninstallerIcon: assets/icon.ico
+  installerHeaderIcon: assets/icon.ico
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+
+linux:
+  target:
+    - AppImage
+    - deb
+  category: Utility
+  icon: assets/icon.png
+
+publish:
+  provider: generic
+  url: https://releases.salvaaa.com
