@@ -24,7 +24,7 @@ export class AssemblyAIClient {
     try {
       this.onTranscript = onTranscript;
 
-      this.realtimeTranscriber = await this.client.realtime.transcribe({
+      this.realtimeTranscriber = await this.client.realtime.transcriber({
         sampleRate: 16000,
         wordBoost: ['interview', 'technical', 'coding', 'algorithm']
       });
