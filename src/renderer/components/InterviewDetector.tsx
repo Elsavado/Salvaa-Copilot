@@ -30,6 +30,7 @@ const InterviewDetector: React.FC = () => {
       cleanupStart();
       cleanupEnd();
     };
+  }, []); // <-- THIS WAS MISSING AND BREAKING THE CODE
 
   const platforms = [
     { name: 'Zoom', icon: '🎥' },
