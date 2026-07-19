@@ -55,26 +55,41 @@ export class STTPipeline {
         throw new Error('AssemblyAI client not initialized');
       }
 
-      // Start real-time transcription
-      this.transcriber = await this.client.realtime.transcriber({
+      // UPGRADE (v3): Using client.streaming instead of client.realtime
+      // and camelCase option properties ('speechModel' and 'sampleRate')
+      this.transcriber = this.client.streaming.transcriber({
+        speechModel: 'universal-3-5-pro',
         sampleRate: 16000,
         wordBoost: ['interview', 'technical', 'coding']
       });
 
-      this.transcriber.on('transcript', (transcript: any) => {
-        if (this.onTranscription) {
+      // UPGRADE (v3): Listening to the 'turn' event instead of 'transcript'
+      this.transcriber.on('turn', (turn: any) => {
+        if (this.onTranscription && turn.transcript) {
           this.onTranscription({
-            text: transcript.text,
-            isFinal: transcript.message_type === 'FinalTranscript',
+            text: turn.transcript,                       // UPGRADE: turn.transcript replaces transcript.text
+            isFinal: turn.end_of_turn === true,          // UPGRADE: turn.end_of_turn replaces message_type comparison
             timestamp: Date.now(),
-            speaker: this.detectSpeaker(transcript.text)
+            speaker: this.detectSpeaker(turn.transcript)
           });
         }
+      });
+
+      // UPGRADE (v3): Added session lifecycle event hooks for cleaner application logging
+      this.transcriber.on('open', ({ id }: { id: string }) => {
+        logger.info(`AssemblyAI real-time stream established. Session ID: ${id}`);
+      });
+
+      this.transcriber.on('close', (code: number, reason: string) => {
+        logger.info(`AssemblyAI real-time stream closed: ${code} - ${reason}`);
       });
 
       this.transcriber.on('error', (error: Error) => {
         logger.error('Transcription error:', error);
       });
+
+      // UPGRADE (v3): Must explicitly open the websocket connection before sending data
+      await this.transcriber.connect();
 
       this.isTranscribing = true;
 
@@ -86,14 +101,17 @@ export class STTPipeline {
       logger.info('STT transcription started');
     } catch (error) {
       logger.error('Failed to start transcription:', error);
+      this.stopTranscription();
       throw error;
     }
   }
 
-  public stopTranscription(): void {
+  public async stopTranscription(): Promise<void> {
     try {
       if (this.transcriber) {
-        this.transcriber.close();
+        // UPGRADE (v3): await closing handshake to cleanly terminate 
+        // the session on the server side and avoid runaway 3-hour ghost session billing
+        await this.transcriber.close();
         this.transcriber = null;
       }
 
