@@ -27,6 +27,16 @@ class SalvaaaCopilotApp {
     this.storage = new StorageService();
     this.sttPipeline = new STTPipeline();
 
+    // Setup real-time audio activity bridge to forward status to the overlay UI
+    // Adjust this hook matching your specific event/callback registration in audio-capture.ts
+    if (typeof (this.audioCapture as any).onActivityChange === 'function') {
+      (this.audioCapture as any).onActivityChange((isActive: boolean) => {
+        if (this.overlayWindow && !this.overlayWindow.isDestroyed()) {
+          this.overlayWindow.webContents.send('audio-activity-changed', isActive);
+        }
+      });
+    }
+
     this.setupErrorHandlers();
     this.setupIPC();
   }
@@ -165,9 +175,14 @@ class SalvaaaCopilotApp {
       }
     });
 
-  ipcMain.handle('start-audio-capture', async () => {
+    ipcMain.handle('start-audio-capture', async () => {
       try {
         this.isInterviewActive = true;
+        
+        // Explicitly trigger active capture state on your service pipeline
+        await this.audioCapture.startCapture();
+        this.sttPipeline.startTranscription();
+
         if (this.overlayWindow) {
           this.overlayWindow.webContents.send('interview-status-changed', { active: true });
         }
@@ -181,6 +196,11 @@ class SalvaaaCopilotApp {
     ipcMain.handle('stop-audio-capture', async () => {
       try {
         this.isInterviewActive = false;
+        
+        // Explicitly disconnect capture states on your service pipeline
+        this.audioCapture.stopCapture();
+        this.sttPipeline.stopTranscription();
+
         if (this.overlayWindow) {
           this.overlayWindow.webContents.send('interview-status-changed', { active: false });
         }
@@ -254,12 +274,11 @@ class SalvaaaCopilotApp {
 
   private async checkMicrophonePermission(): Promise<boolean> {
     try {
-      // Check if we can enumerate audio devices
       const { systemPreferences } = require('electron');
       if (process.platform === 'darwin') {
         return systemPreferences.getMediaAccessStatus('microphone') === 'granted';
       }
-      return true; // Windows/Linux handle differently
+      return true;
     } catch {
       return false;
     }
@@ -284,8 +303,6 @@ class SalvaaaCopilotApp {
         
         switch (permissionType) {
           case 'screenCapture':
-            // macOS screen recording permission is requested via the system dialog
-            // when we try to capture the screen
             return true;
           case 'microphone':
             return systemPreferences.askForMediaAccess('microphone');
@@ -296,7 +313,7 @@ class SalvaaaCopilotApp {
             return false;
         }
       }
-      return true; // Other platforms handle differently
+      return true;
     } catch (error) {
       logger.error(`Failed to request permission ${permissionType}:`, error);
       return false;
@@ -306,14 +323,9 @@ class SalvaaaCopilotApp {
   private async startInterviewMode(): Promise<void> {
     try {
       this.isInterviewActive = true;
-      
-      // Start system audio capture
       await this.audioCapture.startCapture();
-      
-      // Start STT pipeline
       this.sttPipeline.startTranscription();
       
-      // Notify renderer
       if (this.mainWindow && !this.mainWindow.isDestroyed()) {
         this.mainWindow.webContents.send('interview-started');
       }
@@ -401,19 +413,16 @@ class SalvaaaCopilotApp {
 
   private setupGlobalShortcuts(): void {
     try {
-      // Toggle overlay
       globalShortcut.register('CommandOrControl+Shift+S', () => {
         this.handleToggleOverlay();
       });
       
-      // Read screen
       globalShortcut.register('CommandOrControl+Shift+R', () => {
         if (this.mainWindow && !this.mainWindow.isDestroyed()) {
           this.mainWindow.webContents.send('read-screen-shortcut');
         }
       });
       
-      // Quick hide
       globalShortcut.register('Escape', () => {
         if (this.isOverlayVisible && this.overlayWindow) {
           this.overlayWindow.hide();
@@ -451,9 +460,7 @@ class SalvaaaCopilotApp {
         this.mainWindow = null;
       });
       
-      
-    // Prevent the window from appearing in screenshots/screen sharing
-    this.mainWindow.setContentProtection(true);
+      this.mainWindow.setContentProtection(true);
     } catch (error) {
       logger.error('Failed to create main window:', error);
       throw error;
@@ -465,19 +472,19 @@ class SalvaaaCopilotApp {
       const settings = await this.storage.getSettings();
       const { width: screenWidth } = screen.getPrimaryDisplay().workAreaSize;
       
-      const targetWidth = settings.overlayWidth || 1000; // Making it wide like a toolbar
-      const targetHeight = 250;                          // Shorter height so it sits nicely at the top
+      const targetWidth = settings.overlayWidth || 1000; 
+      const targetHeight = 250;                          
 
       this.overlayWindow = new BrowserWindow({
         width: targetWidth,
         height: targetHeight,
-        x: Math.floor((screenWidth - targetWidth) / 2), // Perfectly centers it at the top of your screen
-        y: 20,                                          // Position it just a little bit down from the very top
+        x: Math.floor((screenWidth - targetWidth) / 2), 
+        y: 20,                                          
         transparent: true,
         frame: false,
         alwaysOnTop: true,
         skipTaskbar: true,
-        resizable: false,                               // Keep the toolbar size locked
+        resizable: false,                               
         opacity: settings.overlayOpacity || 0.95,
         webPreferences: {
           preload: path.join(__dirname, 'preload.js'),
@@ -488,24 +495,18 @@ class SalvaaaCopilotApp {
         icon: path.join(__dirname, '../../assets/icon.png')
       });
 
-      // Crucial OS-level overrides to force it to float above browsers & full-screen apps:
       this.overlayWindow.setAlwaysOnTop(true, 'screen-saver');
       this.overlayWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
-      
-      // Set content protection to prevent screen sharing capture
       this.overlayWindow.setContentProtection(true);
 
-      // 1. FIRST: Set up the listener so Electron is watching for the window to be ready
       this.overlayWindow.once('ready-to-show', () => {
         if (this.overlayWindow) {
           this.overlayWindow.showInactive(); 
         }
       });
       
-      // 2. SECOND: Now tell the window to load the HTML file
       this.overlayWindow.loadFile(path.join(__dirname, '../renderer/index.html'), { hash: 'overlay' });
       
-      // Enable click-through mode if configured
       if (settings.clickThroughMode) {
         this.overlayWindow.setIgnoreMouseEvents(true, { forward: true });
       }
@@ -514,7 +515,6 @@ class SalvaaaCopilotApp {
         this.overlayWindow = null;
       });
       
-      // Handle window blur to maintain always-on-top visually without stealing keyboard focus
       this.overlayWindow.on('blur', () => {
         if (this.overlayWindow && !this.overlayWindow.isDestroyed()) {
           this.overlayWindow.setAlwaysOnTop(true, 'screen-saver');
@@ -530,20 +530,14 @@ class SalvaaaCopilotApp {
     try {
       logger.info('Starting Salvaaa Copilot...');
       
-      // Initialize storage
       await this.storage.initialize();
       
-      // Create windows
       await this.createMainWindow();
       await this.createOverlayWindow();
       
-      // Setup tray
       this.setupTray();
-      
-      // Setup global shortcuts
       this.setupGlobalShortcuts();
       
-      // Start interview detection
       this.interviewDetector.startMonitoring((platform) => {
         logger.info(`Interview detected on ${platform}`);
         this.startInterviewMode();
@@ -560,7 +554,6 @@ class SalvaaaCopilotApp {
   }
 }
 
-// Application entry point
 const salvaAppInstance = new SalvaaaCopilotApp();
 
 app.whenReady().then(() => {
