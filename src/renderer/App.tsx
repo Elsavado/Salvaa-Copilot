@@ -20,6 +20,9 @@ const App: React.FC = () => {
   const [currentView, setCurrentView] = useState<'main' | 'settings' | 'cv' | 'preflight'>('main');
   const [error, setError] = useState<string | null>(null);
 
+  // Check if this window instance is meant to be the overlay window
+  const isOverlayWindow = window.location.hash === '#overlay';
+
   useEffect(() => {
     const initializeApp = async () => {
       try {
@@ -47,6 +50,16 @@ const App: React.FC = () => {
     return cleanup;
   }, []);
 
+  // 1. If this is the overlay window instance, bypass everything else and render the toolbar layout
+  if (isOverlayWindow) {
+    return (
+      <div className="w-full h-full bg-transparent overflow-hidden">
+        <Overlay />
+      </div>
+    );
+  }
+
+  // 2. Standard Main Dashboard View Handling Below
   if (error) {
     return (
       <div className="min-h-screen bg-gray-900 flex items-center justify-center">
