@@ -7,6 +7,18 @@ export class AudioCaptureService {
   private audioChunks: Blob[] = [];
   private onAudioData: ((chunk: AudioData) => void) | null = null;
 
+  // Real-time volume analyzer properties
+  private audioContext: AudioContext | null = null;
+  private analyser: AnalyserNode | null = null;
+  private isSoundDetected: boolean = false;
+  private checkInterval: any = null;
+
+  constructor() {
+    // Expose this instance to the window context so Overlay.tsx can loop-poll it
+    // @ts-ignore
+    window.audioCaptureService = this;
+  }
+
   public async startCapture(): Promise<void> {
     try {
       if (this.isCapturing) {
@@ -15,15 +27,14 @@ export class AudioCaptureService {
       }
 
       // 1. Fetch the source ID safely from the Main Process via the Electron IPC bridge
-      // @ts-ignore - window.electronAPI might not be typed globally
+      // @ts-ignore
       const sourceId = await window.electronAPI.getDesktopSourceId();
       if (!sourceId) {
         throw new Error('No desktop source ID available for audio capture');
       }
 
       // 2. Use browser mediaDevices to capture the system desktop stream
-      // We must pass a video parameter constraint, otherwise Chromium blocks audio-only stream allocations.
-      this.mediaStream = await navigator.mediaDevices.getUserMedia({
+      const rawStream = await navigator.mediaDevices.getUserMedia({
         audio: {
           mandatory: {
             chromeMediaSource: 'desktop',
@@ -43,14 +54,48 @@ export class AudioCaptureService {
         }
       } as any);
 
-      // CRITICAL: Immediately strip out the video track channel so we only process system audio
+      // CRITICAL FIX: Extract audio tracks into an independent stream for Web Audio API BEFORE destroying video tracks
+      const audioTracks = rawStream.getAudioTracks();
+      if (audioTracks.length === 0) {
+        throw new Error('No audio tracks found in desktop capture stream');
+      }
+      
+      const audioOnlyStream = new MediaStream(audioTracks);
+      this.mediaStream = rawStream;
+
+      // Clean up the video track from the primary stream so we aren't wasting resources
       const videoTracks = this.mediaStream.getVideoTracks();
       if (videoTracks.length > 0) {
         this.mediaStream.removeTrack(videoTracks[0]);
         videoTracks[0].stop();
       }
 
-      // 3. Set up MediaRecorder for continuous capture
+      // 3. Set up Web Audio Analyser Node to track active decibel frequencies
+      this.audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const source = this.audioContext.createMediaStreamSource(audioOnlyStream);
+      this.analyser = this.audioContext.createAnalyser();
+      this.analyser.fftSize = 256; 
+      source.connect(this.analyser);
+
+      const bufferLength = this.analyser.frequencyBinCount;
+      const dataArray = new Uint8Array(bufferLength);
+
+      // Poll audio buffer data every 100ms
+      this.checkInterval = setInterval(() => {
+        if (!this.analyser) return;
+        this.analyser.getByteFrequencyData(dataArray);
+
+        let totalAmplitude = 0;
+        for (let i = 0; i < bufferLength; i++) {
+          totalAmplitude += dataArray[i];
+        }
+        const averageVolume = totalAmplitude / bufferLength;
+
+        // A threshold of 2 filters out minor microphone loop/system background hiss
+        this.isSoundDetected = averageVolume > 2;
+      }, 100);
+
+      // 4. Set up MediaRecorder for continuous capture split chunks
       this.mediaRecorder = new MediaRecorder(this.mediaStream, {
         mimeType: 'audio/webm;codecs=opus'
       });
@@ -70,29 +115,48 @@ export class AudioCaptureService {
       this.mediaRecorder.start(100); // Capture and stream chunks every 100ms
       this.isCapturing = true;
 
-      logger.info('System audio capture started successfully');
+      logger.info('System audio capture started successfully with real-time volume detection');
     } catch (error) {
       logger.error('Failed to start audio capture:', error);
+      this.stopCapture();
       throw error;
     }
   }
 
+  // Public getter method read directly by your Overlay.tsx UI loop
+  public isAudioPlaying(): boolean {
+    return this.isCapturing && this.isSoundDetected;
+  }
+
   public stopCapture(): void {
     try {
+      if (this.checkInterval) {
+        clearInterval(this.checkInterval);
+        this.checkInterval = null;
+      }
+
+      if (this.audioContext) {
+        this.audioContext.close();
+        this.audioContext = null;
+        this.analyser = null;
+      }
+
       if (this.mediaRecorder && this.mediaRecorder.state !== 'inactive') {
         this.mediaRecorder.stop();
       }
 
       if (this.mediaStream) {
         this.mediaStream.getTracks().forEach(track => track.stop());
+        this.mediaStream = null;
       }
 
       this.isCapturing = false;
+      this.isSoundDetected = false;
       this.audioChunks = [];
       
-      logger.info('Audio capture stopped');
+      logger.info('Audio capture stopped and audio context cleaned up');
     } catch (error) {
-      logger.error('Failed to stop audio capture:', error);
+      logger.error('Failed to stop audio capture smoothly:', error);
     }
   }
 
@@ -125,7 +189,6 @@ export class AudioCaptureService {
   public stopMicrophoneCapture(): void {
     try {
       if (this.mediaStream) {
-        // Remove microphone tracks only
         const micTracks = this.mediaStream.getAudioTracks().filter(
           track => track.label.includes('Microphone')
         );
