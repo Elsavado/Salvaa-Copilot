@@ -1,7 +1,7 @@
 import { app, BrowserWindow, ipcMain, Tray, Menu, globalShortcut, screen, desktopCapturer } from 'electron';
 import * as path from 'path';
 import * as fs from 'fs';
-import Anthropic from '@anthropic-ai/sdk'; // Added Anthropic SDK
+import { ClaudeService } from './services/claude-service';
 import { AudioCaptureService } from './audio-capture';
 import { InterviewDetector } from './interview-detector';
 import { ScreenReaderService } from './screen-reader';
@@ -18,10 +18,10 @@ class SalvaaaCopilotApp {
   private screenReader: ScreenReaderService;
   private storage: StorageService;
   private sttPipeline: STTPipeline;
-  private anthropic: Anthropic | null = null; // Added Anthropic container
+  private claudeService: ClaudeService | null = null; // Replaced Anthropic container
   private isOverlayVisible: boolean = true;
   private isInterviewActive: boolean = false;
-  private isInitialized: boolean = false; // Safety flag to prevent double starts
+  private isInitialized: boolean = false;
 
   constructor() {
     this.audioCapture = new AudioCaptureService();
@@ -40,70 +40,58 @@ class SalvaaaCopilotApp {
 
     this.setupErrorHandlers();
     this.setupIPC();
-    this.setupTranscriptionBridge(); // Wire up the pipeline bridge
+    this.setupTranscriptionBridge();
   }
 
   /**
-   * Listens to incoming transcripts from the STT pipeline and forwards them to Claude 4.5 Haiku,
-   * then streams the answers directly to the overlay window.
+   * Lazily initializes or returns the existing ClaudeService instance.
    */
+  private async getOrCreateClaudeService(): Promise<ClaudeService | null> {
+    if (this.claudeService) return this.claudeService;
+
+    const settings = await this.storage.getSettings();
+    if (!settings.anthropicApiKey) {
+      logger.warn('Anthropic API key missing in settings.');
+      return null;
+    }
+
+    // Initialize with settings or a default model
+    this.claudeService = new ClaudeService(
+        settings.anthropicApiKey, 
+        settings.aiModel || 'claude-3-5-haiku-latest'
+    );
+    return this.claudeService;
+  }
+
   private setupTranscriptionBridge(): void {
     this.sttPipeline.setOnTranscription(async (transcript: string) => {
-      // Guard clauses to make sure we should actually generate responses
       if (!this.isInterviewActive || !transcript.trim()) return;
       if (!this.overlayWindow || this.overlayWindow.isDestroyed()) return;
 
       try {
-        if (!this.anthropic) {
-          const settings = await this.storage.getSettings();
-          if (!settings.anthropicApiKey) {
-            logger.warn('Anthropic API key missing in settings. Cannot fetch copiloting answers.');
-            return;
-          }
-          this.anthropic = new Anthropic({ apiKey: settings.anthropicApiKey });
-        }
+        const service = await this.getOrCreateClaudeService();
+        if (!service) return;
 
-        // Notify UI that a response is cooking
         this.overlayWindow.webContents.send('claude-loading', true);
+        this.overlayWindow.webContents.send('claude-clear');
 
         const cvData = await this.storage.getCVData();
         const preflightData = await this.storage.getPreFlightData();
 
-        const systemPrompt = `You are Salvaaa Copilot, an elite technical interview assistant. 
-Your job is to analyze live audio transcripts from an interview and provide optimized, hyper-concise answers, talking points, or code solutions directly to the candidate's overlay.
+        // Delegate prompt and stream handling to the service
+        const systemPrompt = service.getInterviewSystemPrompt(
+            cvData ? JSON.stringify(cvData) : '', 
+            preflightData ? JSON.stringify(preflightData) : ''
+        );
 
-Candidate Background Context:
-${cvData ? JSON.stringify(cvData) : 'None provided'}
-
-Company/Role Details:
-${preflightData ? JSON.stringify(preflightData) : 'None provided'}
-
-CRITICAL DIRECTIONS:
-1. Provide highly practical, scannable, structural bullet points or short code blocks.
-2. Keep text to the absolute minimum required to be helpful under pressure.
-3. Ignore casual filler speech or irrelevant fragments in the transcript.`;
-
-        const stream = await this.anthropic.messages.create({
-          model: 'claude-haiku-4-5-20251001',
-          max_tokens: 1024,
-          system: systemPrompt,
-          messages: [{ role: 'user', content: `Live Transcript Fragment: "${transcript}"` }],
-          stream: true,
+        await service.streamResponse(systemPrompt, transcript, (token) => {
+          if (this.overlayWindow && !this.overlayWindow.isDestroyed()) {
+            this.overlayWindow.webContents.send('claude-token', token);
+          }
         });
 
-        // Clear previous answers on the screen before feeding the fresh response stream
-        this.overlayWindow.webContents.send('claude-clear');
-
-        for await (const chunk of stream) {
-          if (chunk.type === 'content_block_delta' && chunk.delta.type === 'text_delta') {
-            const token = chunk.delta.text;
-            if (this.overlayWindow && !this.overlayWindow.isDestroyed()) {
-              this.overlayWindow.webContents.send('claude-token', token);
-            }
-          }
-        }
       } catch (error) {
-        logger.error('Error during Claude streaming compilation:', error);
+        logger.error('Error in transcription bridge:', error);
       } finally {
         if (this.overlayWindow && !this.overlayWindow.isDestroyed()) {
           this.overlayWindow.webContents.send('claude-loading', false);
@@ -179,8 +167,8 @@ CRITICAL DIRECTIONS:
     ipcMain.handle('save-app-settings', async (_, settings) => {
       try {
         await this.storage.saveSettings(settings);
-        // Force re-instantiation of Anthropic next run if API key changes
-        this.anthropic = null;
+        // Force re-instantiation of service on next request if settings change
+        this.claudeService = null; 
         return { success: true };
       } catch (error) {
         logger.error('Failed to save settings:', error);
@@ -447,7 +435,7 @@ CRITICAL DIRECTIONS:
       this.isOverlayVisible = !this.isOverlayVisible;
       if (this.overlayWindow && !this.overlayWindow.isDestroyed()) {
         if (this.isOverlayVisible) {
-          this.overlayWindow.showInactive(); // Prevents stealing keyboard focus
+          this.overlayWindow.showInactive(); 
           this.startInterviewMode();
         } else {
           this.overlayWindow.hide();
@@ -522,7 +510,7 @@ CRITICAL DIRECTIONS:
       const { width: screenWidth } = screen.getPrimaryDisplay().workAreaSize;
       
       const targetWidth = settings.overlayWidth || 1000; 
-      const targetHeight = 250;                  
+      const targetHeight = 250;                 
 
       this.overlayWindow = new BrowserWindow({
         width: targetWidth,
@@ -533,7 +521,7 @@ CRITICAL DIRECTIONS:
         frame: false,
         alwaysOnTop: true,
         skipTaskbar: true,
-        resizable: false,                               
+        resizable: false,                                
         opacity: settings.overlayOpacity || 0.95,
         webPreferences: {
           preload: path.join(__dirname, 'preload.js'),
@@ -576,7 +564,7 @@ CRITICAL DIRECTIONS:
   }
 
   public async start(): Promise<void> {
-    if (this.isInitialized) return; // Halt if already spun up
+    if (this.isInitialized) return; 
     
     try {
       logger.info('Starting Salvaaa Copilot...');
