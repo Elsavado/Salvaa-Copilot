@@ -6,10 +6,13 @@ import ScreenReaderButton from './ScreenReaderButton';
 import Branding from './Branding';
 
 const Overlay: React.FC = () => {
-  const { isInterviewActive, currentQuestion, currentAnswer } = useInterviewStore();
+  const { currentQuestion, currentAnswer } = useInterviewStore();
   const { settings } = useSettingsStore();
   const [isVisible, setIsVisible] = useState(true);
   const [opacity, setOpacity] = useState(settings.overlayOpacity || 1);
+
+  // Direct, local state tracking to bypass global store synchronization issues
+  const [isAudioLive, setIsAudioLive] = useState(false);
 
   useEffect(() => {
     // Listen for overlay toggle from main process
@@ -23,7 +26,7 @@ const Overlay: React.FC = () => {
     return () => window.removeEventListener('keydown', handleKeyPress);
   }, [isVisible]);
 
-  // Force invoke audio capture initialization when the overlay runs
+  // Force invoke audio capture initialization and establish direct listener
   useEffect(() => {
     const initializeAudioCapture = async () => {
       // @ts-ignore
@@ -31,6 +34,7 @@ const Overlay: React.FC = () => {
         try {
           // @ts-ignore
           await window.electronAPI.startAudioCapture();
+          setIsAudioLive(true); // Snap right to active view if the promise resolves successfully
         } catch (err) {
           console.error('Failed to trigger audio capture stream auto-initialization:', err);
         }
@@ -43,6 +47,9 @@ const Overlay: React.FC = () => {
   if (!isVisible) {
     return null;
   }
+
+  // Map the conditional rendering to our guaranteed local tracking state
+  const isInterviewActive = isAudioLive;
 
   return (
     <div
@@ -134,7 +141,7 @@ const Overlay: React.FC = () => {
       {/* Tailwind & CSS Animation Styles Injection */}
       <style>{`
         @keyframes bounce {
-          0%, 100__ { transform: scaleY(0.2); }
+          0%, 100% { transform: scaleY(0.2); }
           50% { transform: scaleY(1.0); }
         }
         .animate-wave-bar {
