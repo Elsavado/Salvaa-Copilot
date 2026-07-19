@@ -21,6 +21,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   stopAudioCapture: () => ipcRenderer.invoke('stop-audio-capture'),
   getDesktopSourceId: () => ipcRenderer.invoke('get-desktop-source-id'),
   
+  // Audio Data Communication (Added for Renderer -> Main communication)
+  sendAudioChunk: (buffer: ArrayBuffer) => ipcRenderer.send('audio-chunk-received', buffer),
+  sendAudioActivity: (isActive: boolean) => ipcRenderer.send('audio-activity-change', isActive),
+  
   // Screen Reading
   readScreen: () => ipcRenderer.invoke('read-screen'),
   
