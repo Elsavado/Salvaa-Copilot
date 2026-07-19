@@ -12,11 +12,19 @@ export class AudioCaptureService {
   private analyser: AnalyserNode | null = null;
   private isSoundDetected: boolean = false;
   private checkInterval: any = null;
+  
+  // NEW: Callback reference to notify main.ts of volume activity changes
+  private activityCallback: ((isActive: boolean) => void) | null = null;
 
   constructor() {
     // Expose this instance to the window context so Overlay.tsx can loop-poll it
     // @ts-ignore
     window.audioCaptureService = this;
+  }
+
+  // NEW: Public method for main.ts to register its IPC forwarding hook
+  public onActivityChange(callback: (isActive: boolean) => void): void {
+    this.activityCallback = callback;
   }
 
   public async startCapture(): Promise<void> {
@@ -92,7 +100,15 @@ export class AudioCaptureService {
         const averageVolume = totalAmplitude / bufferLength;
 
         // A threshold of 2 filters out minor microphone loop/system background hiss
-        this.isSoundDetected = averageVolume > 2;
+        const currentDetection = averageVolume > 2;
+        
+        // NEW: Only trigger the callback if the sound detection state actually changes
+        if (currentDetection !== this.isSoundDetected) {
+          this.isSoundDetected = currentDetection;
+          if (this.activityCallback) {
+            this.activityCallback(this.isSoundDetected);
+          }
+        }
       }, 100);
 
       // 4. Set up MediaRecorder for continuous capture split chunks
@@ -148,6 +164,11 @@ export class AudioCaptureService {
       if (this.mediaStream) {
         this.mediaStream.getTracks().forEach(track => track.stop());
         this.mediaStream = null;
+      }
+
+      // NEW: Ensure we notify main process it stopped talking
+      if (this.isSoundDetected && this.activityCallback) {
+        this.activityCallback(false);
       }
 
       this.isCapturing = false;
