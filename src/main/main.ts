@@ -472,22 +472,22 @@ class SalvaaaCopilotApp {
         icon: path.join(__dirname, '../../assets/icon.png')
       });
 
-     // Crucial OS-level overrides to force it to float above browsers & full-screen apps:
+      // Crucial OS-level overrides to force it to float above browsers & full-screen apps:
       this.overlayWindow.setAlwaysOnTop(true, 'screen-saver');
       this.overlayWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
       
-      // Load overlay HTML
-      this.overlayWindow.loadFile(path.join(__dirname, '../renderer/index.html'), { hash: 'overlay' });
+      // Set content protection to prevent screen sharing capture
+      this.overlayWindow.setContentProtection(true);
 
-      // PASTE THIS EXACT BLOCK RIGHT HERE 
+      // 1. FIRST: Set up the listener so Electron is watching for the window to be ready
       this.overlayWindow.once('ready-to-show', () => {
         if (this.overlayWindow) {
           this.overlayWindow.showInactive(); 
         }
       });
       
-      // Set content protection to prevent screen sharing capture
-      this.overlayWindow.setContentProtection(true);
+      // 2. SECOND: Now tell the window to load the HTML file
+      this.overlayWindow.loadFile(path.join(__dirname, '../renderer/index.html'), { hash: 'overlay' });
       
       // Enable click-through mode if configured
       if (settings.clickThroughMode) {
