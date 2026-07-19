@@ -436,29 +436,26 @@ class SalvaaaCopilotApp {
       });
       
       // Prevent the window from appearing in screenshots/screen sharing
-      this.mainWindow.setContentProtection(true);
-    } catch (error) {
-      logger.error('Failed to create main window:', error);
-      throw error;
-    }
-  }
-
-  private async createOverlayWindow(): Promise<void> {
+      
+        private async createOverlayWindow(): Promise<void> {
     try {
       const settings = await this.storage.getSettings();
-      const { width: screenWidth, height: screenHeight } = screen.getPrimaryDisplay().workAreaSize;
+      const { width: screenWidth } = screen.getPrimaryDisplay().workAreaSize;
       
+      const targetWidth = settings.overlayWidth || 800; // Making it wide like a toolbar
+      const targetHeight = 60;                          // Shorter height so it sits nicely at the top
+
       this.overlayWindow = new BrowserWindow({
-        width: settings.overlayWidth || 400,
-        height: settings.overlayHeight || 600,
-        x: screenWidth - (settings.overlayWidth || 400) - 20,
-        y: 80,
+        width: targetWidth,
+        height: targetHeight,
+        x: Math.floor((screenWidth - targetWidth) / 2), // Perfectly centers it at the top of your screen
+        y: 20,                                          // Position it just a little bit down from the very top
         transparent: true,
         frame: false,
         alwaysOnTop: true,
         skipTaskbar: true,
-        resizable: true,
-        opacity: settings.overlayOpacity || 0.85,
+        resizable: false,                               // Keep the toolbar size locked
+        opacity: settings.overlayOpacity || 0.95,
         webPreferences: {
           preload: path.join(__dirname, 'preload.js'),
           contextIsolation: true,
@@ -467,6 +464,10 @@ class SalvaaaCopilotApp {
         },
         icon: path.join(__dirname, '../../assets/icon.png')
       });
+
+      // Crucial OS-level overrides to force it to float above browsers & full-screen apps:
+      this.overlayWindow.setAlwaysOnTop(true, 'screen-saver');
+      this.overlayWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
       
       // Load overlay HTML
       this.overlayWindow.loadFile(path.join(__dirname, '../renderer/overlay.html'));
@@ -483,10 +484,10 @@ class SalvaaaCopilotApp {
         this.overlayWindow = null;
       });
       
-      // Handle window blur to maintain always-on-top
+      // Handle window blur to maintain always-on-top visually without stealing keyboard focus
       this.overlayWindow.on('blur', () => {
         if (this.overlayWindow && !this.overlayWindow.isDestroyed()) {
-          this.overlayWindow.focus();
+          this.overlayWindow.setAlwaysOnTop(true, 'screen-saver');
         }
       });
     } catch (error) {
