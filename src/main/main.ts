@@ -449,8 +449,8 @@ class SalvaaaCopilotApp {
       const settings = await this.storage.getSettings();
       const { width: screenWidth } = screen.getPrimaryDisplay().workAreaSize;
       
-      const targetWidth = settings.overlayWidth || 800; // Making it wide like a toolbar
-      const targetHeight = 60;                          // Shorter height so it sits nicely at the top
+      const targetWidth = settings.overlayWidth || 1000; // Making it wide like a toolbar
+      const targetHeight = 250;                          // Shorter height so it sits nicely at the top
 
       this.overlayWindow = new BrowserWindow({
         width: targetWidth,
