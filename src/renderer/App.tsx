@@ -53,7 +53,8 @@ const App: React.FC = () => {
   // 1. If this is the overlay window instance, bypass everything else and render the toolbar layout
   if (isOverlayWindow) {
     return (
-      <div className="w-full h-full bg-transparent overflow-hidden">
+      <div className="w-screen h-screen bg-gray-900 border-2 border-emerald-500 rounded-md p-4 overflow-hidden flex flex-col justify-center items-center">
+        <h3 className="text-xs text-emerald-400 font-bold mb-2 tracking-wider">SALVAAA COPILOT TOOLBAR</h3>
         <Overlay />
       </div>
     );
