@@ -6,14 +6,16 @@ import ScreenReaderButton from './ScreenReaderButton';
 import Branding from './Branding';
 
 const Overlay: React.FC = () => {
-  const { currentQuestion, currentAnswer } = useInterviewStore();
+  // Pull actions from the store to populate streaming tokens dynamically
+  // @ts-ignore (Assuming your store has these or similar setters; adjust names if needed)
+  const { currentQuestion, currentAnswer, setQuestion, setAnswer, appendToken, setLoading } = useInterviewStore();
   const { settings } = useSettingsStore();
   const [isVisible, setIsVisible] = useState(true);
   const [opacity, setOpacity] = useState(settings.overlayOpacity || 1);
 
-  // Tracks if the loopback stream pipeline is connected
+  // Tracks if the pipeline loop is actively running
   const [isAudioLive, setIsAudioLive] = useState(false);
-  // Tracks if active decibels are traveling through the loopback stream
+  // Tracks real active decibel presence via the AudioCaptureService event hook
   const [isWaveMoving, setIsWaveMoving] = useState(false);
 
   useEffect(() => {
@@ -28,7 +30,7 @@ const Overlay: React.FC = () => {
     return () => window.removeEventListener('keydown', handleKeyPress);
   }, [isVisible]);
 
-  // Handle initialization and raw IPC audio status updates
+  // Handle initialization and real IPC event streams
   useEffect(() => {
     const initializeAudioCapture = async () => {
       // @ts-ignore
@@ -45,37 +47,69 @@ const Overlay: React.FC = () => {
 
     initializeAudioCapture();
 
-    // Listen directly to the critical updates emitted by your IPC channels
     // @ts-ignore
-    if (window.electronAPI && typeof window.electronAPI.onCriticalError === 'function') {
-      // Optional fallback: If your setup pushes audio detection flags via event loops
-      // You can bind setIsWaveMoving(true/false) here based on custom event payload structures
-    }
-    
-    // Create a local loop fallback checking if real audio buffers are transmitting chunks
-    const mockAudioMeterInterval = setInterval(() => {
-      // Access your globally shared service instance or local state store here if exposed
+    if (window.electronAPI) {
+      // 1. Listen for real audio activity changes to drive the animation reactively
       // @ts-ignore
-      if (window.audioCaptureService && typeof window.audioCaptureService.isAudioPlaying === 'function') {
+      if (typeof window.electronAPI.onAudioActivityChanged === 'function') {
         // @ts-ignore
-        setIsWaveMoving(window.audioCaptureService.isAudioPlaying());
-      } else {
-        // If your service hasn't exposed its instance to the window context yet, 
-        // we keep the wave running while we check IPC pipelines.
-        setIsWaveMoving(true);
+        window.electronAPI.onAudioActivityChanged((isActive: boolean) => {
+          setIsWaveMoving(isActive);
+        });
       }
-    }, 150);
+
+      // 2. Listen for interview state modifications triggered remotely
+      // @ts-ignore
+      if (typeof window.electronAPI.onInterviewStatusChanged === 'function') {
+        // @ts-ignore
+        window.electronAPI.onInterviewStatusChanged((status: { active: boolean }) => {
+          setIsAudioLive(status.active);
+        });
+      }
+
+      // 3. Clear text fields when a fresh pipeline execution cycles through
+      // @ts-ignore
+      if (typeof window.electronAPI.onClaudeClear === 'function') {
+        // @ts-ignore
+        window.electronAPI.onClaudeClear(() => {
+          if (typeof setAnswer === 'function') setAnswer('');
+          if (typeof setQuestion === 'function') setQuestion('');
+        });
+      }
+
+      // 4. Update store loading indicators to notify UI processing changes
+      // @ts-ignore
+      if (typeof window.electronAPI.onClaudeLoading === 'function') {
+        // @ts-ignore
+        window.electronAPI.onClaudeLoading((isLoading: boolean) => {
+          if (typeof setLoading === 'function') setLoading(isLoading);
+        });
+      }
+
+      // 5. Append incoming streamed text fragments down into your store state
+      // @ts-ignore
+      if (typeof window.electronAPI.onClaudeToken === 'function') {
+        // @ts-ignore
+        window.electronAPI.onClaudeToken((token: string) => {
+          if (typeof appendToken === 'function') {
+            appendToken(token);
+          } else if (typeof setAnswer === 'function') {
+            // Fallback if appendToken doesn't exist in your Zustand implementation
+            setAnswer((prev: string) => prev + token);
+          }
+        });
+      }
+    }
 
     return () => {
-      clearInterval(mockAudioMeterInterval);
+      // Clean up IPC listeners here if your preload setup exposes unbinders
     };
-  }, []);
+  }, [setAnswer, setQuestion, appendToken, setLoading]);
 
   if (!isVisible) {
     return null;
   }
 
-  // Map the conditional layout rendering to our tracking state
   const isInterviewActive = isAudioLive;
 
   return (
@@ -113,16 +147,16 @@ const Overlay: React.FC = () => {
           <div className="bg-gray-800/40 rounded p-4 border border-dashed border-gray-700 flex flex-col items-center justify-center text-center space-y-3">
             {isInterviewActive ? (
               <>
-                {/* Micro Waveform Animation - Now conditionally animated! */}
+                {/* Waveform Animation - Driven entirely by genuine audio decibel data loops! */}
                 <div className="flex items-end justify-center space-x-1 h-6 w-12 mb-1">
-                  <div className={`w-1 bg-emerald-400 rounded-full ${isWaveMoving ? 'animate-wave-bar' : ''}`} style={{ height: '40%', animationDelay: '0.1s' }}></div>
-                  <div className={`w-1 bg-emerald-400 rounded-full ${isWaveMoving ? 'animate-wave-bar' : ''}`} style={{ height: '80%', animationDelay: '0.3s' }}></div>
-                  <div className={`w-1 bg-emerald-400 rounded-full ${isWaveMoving ? 'animate-wave-bar' : ''}`} style={{ height: '100%', animationDelay: '0.6s' }}></div>
-                  <div className={`w-1 bg-emerald-400 rounded-full ${isWaveMoving ? 'animate-wave-bar' : ''}`} style={{ height: '60%', animationDelay: '0.2s' }}></div>
-                  <div className={`w-1 bg-emerald-400 rounded-full ${isWaveMoving ? 'animate-wave-bar' : ''}`} style={{ height: '30%', animationDelay: '0.4s' }}></div>
+                  <div className={`w-1 bg-emerald-400 rounded-full ${isWaveMoving ? 'animate-wave-bar' : 'h-1'}`} style={{ height: isWaveMoving ? '40%' : '4px', animationDelay: '0.1s' }}></div>
+                  <div className={`w-1 bg-emerald-400 rounded-full ${isWaveMoving ? 'animate-wave-bar' : 'h-1'}`} style={{ height: isWaveMoving ? '80%' : '4px', animationDelay: '0.3s' }}></div>
+                  <div className={`w-1 bg-emerald-400 rounded-full ${isWaveMoving ? 'animate-wave-bar' : 'h-1'}`} style={{ height: isWaveMoving ? '100%' : '4px', animationDelay: '0.6s' }}></div>
+                  <div className={`w-1 bg-emerald-400 rounded-full ${isWaveMoving ? 'animate-wave-bar' : 'h-1'}`} style={{ height: isWaveMoving ? '60%' : '4px', animationDelay: '0.2s' }}></div>
+                  <div className={`w-1 bg-emerald-400 rounded-full ${isWaveMoving ? 'animate-wave-bar' : 'h-1'}`} style={{ height: isWaveMoving ? '30%' : '4px', animationDelay: '0.4s' }}></div>
                 </div>
-                <p className="text-xs font-semibold text-emerald-400 tracking-wide uppercase animate-pulse">
-                  Audio source detected
+                <p className="text-xs font-semibold text-emerald-400 tracking-wide uppercase">
+                  {isWaveMoving ? 'Processing Speech...' : 'Audio Stream Connected'}
                 </p>
                 <p className="text-xs text-gray-400 max-w-xs">
                   Awaiting interview questions and Claude answers...
@@ -165,7 +199,7 @@ const Overlay: React.FC = () => {
         </div>
       </div>
 
-      {/* Tailwind & CSS Animation Styles Injection */}
+      {/* CSS Animation Styles Injection */}
       <style>{`
         @keyframes bounce {
           0%, 100% { transform: scaleY(0.2); }
