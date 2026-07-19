@@ -1,26 +1,11 @@
-import { desktopCapturer, systemPreferences } from 'electron';
 import { logger } from './logger';
 
 export class AudioCaptureService {
-  private audioContext: AudioContext | null = null;
   private mediaStream: MediaStream | null = null;
   private mediaRecorder: MediaRecorder | null = null;
   private isCapturing: boolean = false;
   private audioChunks: Blob[] = [];
   private onAudioData: ((chunk: AudioData) => void) | null = null;
-
-  constructor() {
-    this.setupAudioContext();
-  }
-
-  private setupAudioContext(): void {
-    try {
-      // @ts-ignore - AudioContext may not be available in all Electron versions
-      this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
-    } catch (error) {
-      logger.error('Failed to create AudioContext:', error);
-    }
-  }
 
   public async startCapture(): Promise<void> {
     try {
@@ -29,29 +14,25 @@ export class AudioCaptureService {
         return;
       }
 
-      // Get system audio stream
-      const sources = await desktopCapturer.getSources({
-        types: ['screen'],
-        thumbnailSize: { width: 0, height: 0 },
-        fetchWindowIcons: false
-      });
-
-      if (sources.length === 0) {
-        throw new Error('No screen sources available for audio capture');
+      // 1. Fetch the source ID safely from the Main Process via the Electron IPC bridge
+      // @ts-ignore - window.electronAPI might not be typed globally
+      const sourceId = await window.electronAPI.getDesktopSourceId();
+      if (!sourceId) {
+        throw new Error('No desktop source ID available for audio capture');
       }
 
-      // Get audio stream from screen capture
+      // 2. Use browser mediaDevices to capture the system desktop audio stream
       this.mediaStream = await navigator.mediaDevices.getUserMedia({
         audio: {
           mandatory: {
             chromeMediaSource: 'desktop',
-            chromeMediaSourceId: sources[0].id
+            chromeMediaSourceId: sourceId
           }
         },
         video: false
       } as any);
 
-      // Set up MediaRecorder for continuous capture
+      // 3. Set up MediaRecorder for continuous capture
       this.mediaRecorder = new MediaRecorder(this.mediaStream, {
         mimeType: 'audio/webm;codecs=opus'
       });
@@ -68,10 +49,10 @@ export class AudioCaptureService {
         }
       };
 
-      this.mediaRecorder.start(100); // Capture every 100ms
+      this.mediaRecorder.start(100); // Capture and stream chunks every 100ms
       this.isCapturing = true;
 
-      logger.info('System audio capture started');
+      logger.info('System audio capture started successfully');
     } catch (error) {
       logger.error('Failed to start audio capture:', error);
       throw error;
