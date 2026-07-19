@@ -19,6 +19,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Audio Controls
   startAudioCapture: () => ipcRenderer.invoke('start-audio-capture'),
   stopAudioCapture: () => ipcRenderer.invoke('stop-audio-capture'),
+  getDesktopSourceId: () => ipcRenderer.invoke('get-desktop-source-id'),
   
   // Screen Reading
   readScreen: () => ipcRenderer.invoke('read-screen'),
