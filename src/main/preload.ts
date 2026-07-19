@@ -51,5 +51,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onNavigate: (callback: (event: any, route: string) => void) => {
     ipcRenderer.on('navigate', (_, route) => callback(_, route));
     return () => ipcRenderer.removeListener('navigate', callback);
+  },
+  
+  // NEW: Audio Activity listener to pass audio volume detection down to React
+  onAudioActivity: (callback: (isActive: boolean) => void) => {
+    const listener = (_: any, isActive: boolean) => callback(isActive);
+    ipcRenderer.on('audio-activity-changed', listener);
+    return () => ipcRenderer.removeListener('audio-activity-changed', listener);
   }
 });
