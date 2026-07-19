@@ -23,6 +23,23 @@ const Overlay: React.FC = () => {
     return () => window.removeEventListener('keydown', handleKeyPress);
   }, [isVisible]);
 
+  // Force invoke audio capture initialization when the overlay runs
+  useEffect(() => {
+    const initializeAudioCapture = async () => {
+      // @ts-ignore
+      if (window.electronAPI && typeof window.electronAPI.startAudioCapture === 'function') {
+        try {
+          // @ts-ignore
+          await window.electronAPI.startAudioCapture();
+        } catch (err) {
+          console.error('Failed to trigger audio capture stream auto-initialization:', err);
+        }
+      }
+    };
+
+    initializeAudioCapture();
+  }, []);
+
   if (!isVisible) {
     return null;
   }
@@ -117,7 +134,7 @@ const Overlay: React.FC = () => {
       {/* Tailwind & CSS Animation Styles Injection */}
       <style>{`
         @keyframes bounce {
-          0%, 100% { transform: scaleY(0.2); }
+          0%, 100__ { transform: scaleY(0.2); }
           50% { transform: scaleY(1.0); }
         }
         .animate-wave-bar {
