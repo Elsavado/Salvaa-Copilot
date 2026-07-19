@@ -165,22 +165,28 @@ class SalvaaaCopilotApp {
       }
     });
 
-    ipcMain.handle('start-audio-capture', async () => {
+  ipcMain.handle('start-audio-capture', async () => {
       try {
-        await this.audioCapture.startCapture();
+        this.isInterviewActive = true;
+        if (this.overlayWindow) {
+          this.overlayWindow.webContents.send('interview-status-changed', { active: true });
+        }
         return { success: true };
       } catch (error) {
-        logger.error('Failed to start audio capture:', error);
+        logger.error('Failed to update interview start state:', error);
         throw error;
       }
     });
 
     ipcMain.handle('stop-audio-capture', async () => {
       try {
-        this.audioCapture.stopCapture();
+        this.isInterviewActive = false;
+        if (this.overlayWindow) {
+          this.overlayWindow.webContents.send('interview-status-changed', { active: false });
+        }
         return { success: true };
       } catch (error) {
-        logger.error('Failed to stop audio capture:', error);
+        logger.error('Failed to update interview stop state:', error);
         throw error;
       }
     });
