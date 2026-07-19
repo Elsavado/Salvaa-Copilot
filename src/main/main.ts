@@ -19,6 +19,7 @@ class SalvaaaCopilotApp {
   private sttPipeline: STTPipeline;
   private isOverlayVisible: boolean = true;
   private isInterviewActive: boolean = false;
+  private isInitialized: boolean = false; // Safety flag to prevent double starts
 
   constructor() {
     this.audioCapture = new AudioCaptureService();
@@ -27,8 +28,6 @@ class SalvaaaCopilotApp {
     this.storage = new StorageService();
     this.sttPipeline = new STTPipeline();
 
-    // Setup real-time audio activity bridge to forward status to the overlay UI
-    // Adjust this hook matching your specific event/callback registration in audio-capture.ts
     if (typeof (this.audioCapture as any).onActivityChange === 'function') {
       (this.audioCapture as any).onActivityChange((isActive: boolean) => {
         if (this.overlayWindow && !this.overlayWindow.isDestroyed()) {
@@ -60,11 +59,8 @@ class SalvaaaCopilotApp {
   private async handleCriticalError(error: Error): Promise<void> {
     try {
       logger.error('Critical error handler invoked:', error.message);
-      
-      // Save state
       await this.storage.saveEmergencyState();
       
-      // Notify user
       if (this.mainWindow && !this.mainWindow.isDestroyed()) {
         this.mainWindow.webContents.send('critical-error', {
           message: 'An unexpected error occurred. The application will attempt to recover.',
@@ -158,16 +154,7 @@ class SalvaaaCopilotApp {
 
     ipcMain.handle('toggle-overlay', async () => {
       try {
-        this.isOverlayVisible = !this.isOverlayVisible;
-        if (this.overlayWindow) {
-          if (this.isOverlayVisible) {
-            this.overlayWindow.show();
-            this.startInterviewMode();
-          } else {
-            this.overlayWindow.hide();
-            this.stopInterviewMode();
-          }
-        }
+        this.handleToggleOverlay();
         return { visible: this.isOverlayVisible };
       } catch (error) {
         logger.error('Failed to toggle overlay:', error);
@@ -178,8 +165,6 @@ class SalvaaaCopilotApp {
     ipcMain.handle('start-audio-capture', async () => {
       try {
         this.isInterviewActive = true;
-        
-        // Explicitly trigger active capture state on your service pipeline
         await this.audioCapture.startCapture();
         this.sttPipeline.startTranscription();
 
@@ -196,8 +181,6 @@ class SalvaaaCopilotApp {
     ipcMain.handle('stop-audio-capture', async () => {
       try {
         this.isInterviewActive = false;
-        
-        // Explicitly disconnect capture states on your service pipeline
         this.audioCapture.stopCapture();
         this.sttPipeline.stopTranscription();
 
@@ -237,12 +220,11 @@ class SalvaaaCopilotApp {
 
     ipcMain.handle('check-permissions', async () => {
       try {
-        const permissions = {
+        return {
           screenCapture: await this.checkScreenCapturePermission(),
           microphone: await this.checkMicrophonePermission(),
           accessibility: await this.checkAccessibilityPermission()
         };
-        return permissions;
       } catch (error) {
         logger.error('Failed to check permissions:', error);
         throw error;
@@ -274,8 +256,8 @@ class SalvaaaCopilotApp {
 
   private async checkMicrophonePermission(): Promise<boolean> {
     try {
-      const { systemPreferences } = require('electron');
       if (process.platform === 'darwin') {
+        const { systemPreferences } = require('electron');
         return systemPreferences.getMediaAccessStatus('microphone') === 'granted';
       }
       return true;
@@ -329,7 +311,6 @@ class SalvaaaCopilotApp {
       if (this.mainWindow && !this.mainWindow.isDestroyed()) {
         this.mainWindow.webContents.send('interview-started');
       }
-      
       logger.info('Interview mode activated');
     } catch (error) {
       logger.error('Failed to start interview mode:', error);
@@ -345,7 +326,6 @@ class SalvaaaCopilotApp {
       if (this.mainWindow && !this.mainWindow.isDestroyed()) {
         this.mainWindow.webContents.send('interview-ended');
       }
-      
       logger.info('Interview mode deactivated');
     } catch (error) {
       logger.error('Failed to stop interview mode:', error);
@@ -360,9 +340,7 @@ class SalvaaaCopilotApp {
       const contextMenu = Menu.buildFromTemplate([
         {
           label: 'Show/Hide Overlay',
-          click: () => {
-            this.handleToggleOverlay();
-          }
+          click: () => this.handleToggleOverlay()
         },
         { type: 'separator' },
         {
@@ -377,29 +355,25 @@ class SalvaaaCopilotApp {
         { type: 'separator' },
         {
           label: 'Quit',
-          click: () => {
-            app.quit();
-          }
+          click: () => app.quit()
         }
       ]);
       
       this.tray.setToolTip('Salvaaa Copilot - A Product of Salvaaa Technical Solutions');
       this.tray.setContextMenu(contextMenu);
       
-      this.tray.on('click', () => {
-        this.handleToggleOverlay();
-      });
+      this.tray.on('click', () => this.handleToggleOverlay());
     } catch (error) {
       logger.error('Failed to setup tray:', error);
     }
   }
 
-  private handleToggleOverlay(): void {
+  public handleToggleOverlay(): void {
     try {
       this.isOverlayVisible = !this.isOverlayVisible;
-      if (this.overlayWindow) {
+      if (this.overlayWindow && !this.overlayWindow.isDestroyed()) {
         if (this.isOverlayVisible) {
-          this.overlayWindow.show();
+          this.overlayWindow.showInactive(); // Prevents stealing keyboard focus
           this.startInterviewMode();
         } else {
           this.overlayWindow.hide();
@@ -423,10 +397,12 @@ class SalvaaaCopilotApp {
         }
       });
       
-      globalShortcut.register('Escape', () => {
-        if (this.isOverlayVisible && this.overlayWindow) {
+      // Replaced global 'Escape' with a safer option to avoid stealing native OS behavior
+      globalShortcut.register('CommandOrControl+Shift+X', () => {
+        if (this.isOverlayVisible && this.overlayWindow && !this.overlayWindow.isDestroyed()) {
           this.overlayWindow.hide();
           this.isOverlayVisible = false;
+          this.stopInterviewMode();
         }
       });
     } catch (error) {
@@ -473,7 +449,7 @@ class SalvaaaCopilotApp {
       const { width: screenWidth } = screen.getPrimaryDisplay().workAreaSize;
       
       const targetWidth = settings.overlayWidth || 1000; 
-      const targetHeight = 250;                          
+      const targetHeight = 250;                  
 
       this.overlayWindow = new BrowserWindow({
         width: targetWidth,
@@ -500,7 +476,7 @@ class SalvaaaCopilotApp {
       this.overlayWindow.setContentProtection(true);
 
       this.overlayWindow.once('ready-to-show', () => {
-        if (this.overlayWindow) {
+        if (this.overlayWindow && !this.overlayWindow.isDestroyed()) {
           this.overlayWindow.showInactive(); 
         }
       });
@@ -527,11 +503,13 @@ class SalvaaaCopilotApp {
   }
 
   public async start(): Promise<void> {
+    if (this.isInitialized) return; // Halt if already spun up
+    
     try {
       logger.info('Starting Salvaaa Copilot...');
+      this.isInitialized = true;
       
       await this.storage.initialize();
-      
       await this.createMainWindow();
       await this.createOverlayWindow();
       
