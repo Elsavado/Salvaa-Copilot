@@ -21,7 +21,8 @@ export class AudioCaptureService {
         throw new Error('No desktop source ID available for audio capture');
       }
 
-      // 2. Use browser mediaDevices to capture the system desktop audio stream
+      // 2. Use browser mediaDevices to capture the system desktop stream
+      // We must pass a video parameter constraint, otherwise Chromium blocks audio-only stream allocations.
       this.mediaStream = await navigator.mediaDevices.getUserMedia({
         audio: {
           mandatory: {
@@ -29,8 +30,25 @@ export class AudioCaptureService {
             chromeMediaSourceId: sourceId
           }
         },
-        video: false
+        video: {
+          mandatory: {
+            chromeMediaSource: 'desktop',
+            chromeMediaSourceId: sourceId
+          },
+          optional: [
+            { width: 4 },
+            { height: 4 },
+            { frameRate: 1 }
+          ]
+        }
       } as any);
+
+      // CRITICAL: Immediately strip out the video track channel so we only process system audio
+      const videoTracks = this.mediaStream.getVideoTracks();
+      if (videoTracks.length > 0) {
+        this.mediaStream.removeTrack(videoTracks[0]);
+        videoTracks[0].stop();
+      }
 
       // 3. Set up MediaRecorder for continuous capture
       this.mediaRecorder = new MediaRecorder(this.mediaStream, {
