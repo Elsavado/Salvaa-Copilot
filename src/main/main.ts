@@ -191,6 +191,16 @@ class SalvaaaCopilotApp {
       }
     });
 
+    ipcMain.handle('get-desktop-source-id', async () => {
+      try {
+        const sources = await desktopCapturer.getSources({ types: ['screen'] });
+        return sources.length > 0 ? sources[0].id : null;
+      } catch (error) {
+        logger.error('Failed to get desktop source ID:', error);
+        return null;
+      }
+    });
+
     ipcMain.handle('read-screen', async () => {
       try {
         const text = await this.screenReader.captureAndRead();
