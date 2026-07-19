@@ -477,7 +477,14 @@ class SalvaaaCopilotApp {
       this.overlayWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
       
       // Load overlay HTML
-      this.overlayWindow.loadFile(path.join(__dirname, '../renderer/overlay.html'));
+      this.overlayWindow.loadFile(path.join(__dirname, '../renderer/index.html'), { hash: 'overlay' });
+
+      // PASTE THIS EXACT BLOCK RIGHT HERE 
+      this.overlayWindow.once('ready-to-show', () => {
+        if (this.overlayWindow) {
+          this.overlayWindow.showInactive(); 
+        }
+      });
       
       // Set content protection to prevent screen sharing capture
       this.overlayWindow.setContentProtection(true);
