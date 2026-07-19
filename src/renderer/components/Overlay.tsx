@@ -6,9 +6,16 @@ import ScreenReaderButton from './ScreenReaderButton';
 import Branding from './Branding';
 
 const Overlay: React.FC = () => {
-  // Pull actions from the store to populate streaming tokens dynamically
-  // @ts-ignore (Assuming your store has these or similar setters; adjust names if needed)
-  const { currentQuestion, currentAnswer, setQuestion, setAnswer, appendToken, setLoading } = useInterviewStore();
+  // Swapped out placeholders for your exact interviewStore keys
+  const { 
+    currentQuestion, 
+    currentAnswer, 
+    setCurrentQuestion, 
+    setCurrentAnswer, 
+    appendAnswerToken, 
+    setLoading 
+  } = useInterviewStore();
+  
   const { settings } = useSettingsStore();
   const [isVisible, setIsVisible] = useState(true);
   const [opacity, setOpacity] = useState(settings.overlayOpacity || 1);
@@ -72,8 +79,8 @@ const Overlay: React.FC = () => {
       if (typeof window.electronAPI.onClaudeClear === 'function') {
         // @ts-ignore
         window.electronAPI.onClaudeClear(() => {
-          if (typeof setAnswer === 'function') setAnswer('');
-          if (typeof setQuestion === 'function') setQuestion('');
+          if (typeof setCurrentAnswer === 'function') setCurrentAnswer('');
+          if (typeof setCurrentQuestion === 'function') setCurrentQuestion('');
         });
       }
 
@@ -91,11 +98,8 @@ const Overlay: React.FC = () => {
       if (typeof window.electronAPI.onClaudeToken === 'function') {
         // @ts-ignore
         window.electronAPI.onClaudeToken((token: string) => {
-          if (typeof appendToken === 'function') {
-            appendToken(token);
-          } else if (typeof setAnswer === 'function') {
-            // Fallback if appendToken doesn't exist in your Zustand implementation
-            setAnswer((prev: string) => prev + token);
+          if (typeof appendAnswerToken === 'function') {
+            appendAnswerToken(token);
           }
         });
       }
@@ -104,7 +108,7 @@ const Overlay: React.FC = () => {
     return () => {
       // Clean up IPC listeners here if your preload setup exposes unbinders
     };
-  }, [setAnswer, setQuestion, appendToken, setLoading]);
+  }, [setCurrentAnswer, setCurrentQuestion, appendAnswerToken, setLoading]);
 
   if (!isVisible) {
     return null;
@@ -147,7 +151,7 @@ const Overlay: React.FC = () => {
           <div className="bg-gray-800/40 rounded p-4 border border-dashed border-gray-700 flex flex-col items-center justify-center text-center space-y-3">
             {isInterviewActive ? (
               <>
-                {/* Waveform Animation - Driven entirely by genuine audio decibel data loops! */}
+                {/* Waveform Animation */}
                 <div className="flex items-end justify-center space-x-1 h-6 w-12 mb-1">
                   <div className={`w-1 bg-emerald-400 rounded-full ${isWaveMoving ? 'animate-wave-bar' : 'h-1'}`} style={{ height: isWaveMoving ? '40%' : '4px', animationDelay: '0.1s' }}></div>
                   <div className={`w-1 bg-emerald-400 rounded-full ${isWaveMoving ? 'animate-wave-bar' : 'h-1'}`} style={{ height: isWaveMoving ? '80%' : '4px', animationDelay: '0.3s' }}></div>
