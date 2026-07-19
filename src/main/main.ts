@@ -435,9 +435,16 @@ class SalvaaaCopilotApp {
         this.mainWindow = null;
       });
       
-      // Prevent the window from appearing in screenshots/screen sharing
       
-        private async createOverlayWindow(): Promise<void> {
+    // Prevent the window from appearing in screenshots/screen sharing
+    this.mainWindow.setContentProtection(true);
+    } catch (error) {
+      logger.error('Failed to create main window:', error);
+      throw error;
+    }
+  }
+
+  private async createOverlayWindow(): Promise<void> {
     try {
       const settings = await this.storage.getSettings();
       const { width: screenWidth } = screen.getPrimaryDisplay().workAreaSize;
@@ -465,7 +472,7 @@ class SalvaaaCopilotApp {
         icon: path.join(__dirname, '../../assets/icon.png')
       });
 
-      // Crucial OS-level overrides to force it to float above browsers & full-screen apps:
+     // Crucial OS-level overrides to force it to float above browsers & full-screen apps:
       this.overlayWindow.setAlwaysOnTop(true, 'screen-saver');
       this.overlayWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
       
