@@ -64,9 +64,13 @@ class SalvaaaCopilotApp {
   }
 
   private setupTranscriptionBridge(): void {
-    this.sttPipeline.setOnTranscription(async (transcript: string) => {
-      if (!this.isInterviewActive || !transcript.trim()) return;
-      if (!this.overlayWindow || this.overlayWindow.isDestroyed()) return;
+    this.sttPipeline.setOnTranscription(async (chunk: any) => {
+  // Extract the string text from the chunk object
+  const transcript = chunk.text; 
+
+  // Guard clauses (updated to check 'transcript' instead of 'transcript.trim()')
+  if (!this.isInterviewActive || !transcript || !transcript.trim()) return;
+  if (!this.overlayWindow || this.overlayWindow.isDestroyed()) return;
 
       try {
         const service = await this.getOrCreateClaudeService();
