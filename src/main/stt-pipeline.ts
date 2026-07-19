@@ -59,7 +59,6 @@ export class STTPipeline {
       this.transcriber = this.client.streaming.transcriber({
         speechModel: 'universal-3-5-pro',
         sampleRate: 16000,
-        wordBoost: ['interview', 'technical', 'coding', 'algorithm']
       });
 
       this.transcriber.on('turn', (turn: any) => {
